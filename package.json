@@ -6,17 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "verify-supabase": "tsx scripts/verify-supabase.ts",
-    "setup-project": "tsx scripts/setup-project.ts",
-    "db:status": "tsx scripts/verify-supabase.ts",
-    "db:setup": "tsx scripts/setup-project.ts",
-    "db:create": "tsx scripts/create-database.ts"
+    "lint": "next lint"
   },
   "dependencies": {
     "@google/genai": "^1.20.0",
-    "@supabase/supabase-js": "^2.57.4",
-    "@vercel/speed-insights": "^1.2.0",
     "chart.js": "^4.5.0",
     "dotenv": "^17.2.2",
     "firebase": "^12.3.0",
