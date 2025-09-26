@@ -1,9 +1,11 @@
 'use client'
 
-import React, { createContext, useContext, useState, ReactNode } from 'react'
+import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react'
+import { collection, onSnapshot } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import GoogleMapsLoader from '../components/GoogleMapsLoader'
 import type { Route as RouteType, Company, Employee, PermissionProfile } from '../types'
-import { MOCK_ROUTES, MOCK_COMPANIES, MOCK_EMPLOYEES, MOCK_PERMISSION_PROFILES } from '../constants'
+import { AuthProvider } from './auth/AuthContext'
 
 interface AppContextType {
   routes: RouteType[]
@@ -31,10 +33,32 @@ interface AppProviderProps {
 }
 
 export function AppProvider({ children }: AppProviderProps) {
-  const [routes, setRoutes] = useState<RouteType[]>(MOCK_ROUTES)
-  const [companies, setCompanies] = useState<Company[]>(MOCK_COMPANIES)
-  const [employees, setEmployees] = useState<Employee[]>(MOCK_EMPLOYEES)
-  const [permissionProfiles, setPermissionProfiles] = useState<PermissionProfile[]>(MOCK_PERMISSION_PROFILES)
+  const [routes, setRoutes] = useState<RouteType[]>([])
+  const [companies, setCompanies] = useState<Company[]>([])
+  const [employees, setEmployees] = useState<Employee[]>([])
+  const [permissionProfiles, setPermissionProfiles] = useState<PermissionProfile[]>([])
+
+  useEffect(() => {
+    const unsubscribes = [
+      onSnapshot(collection(db, 'companies'), (snapshot) => {
+        const companiesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Company));
+        setCompanies(companiesData);
+      }),
+      onSnapshot(collection(db, 'employees'), (snapshot) => {
+        const employeesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Employee));
+        setEmployees(employeesData);
+      }),
+      onSnapshot(collection(db, 'routes'), (snapshot) => {
+        const routesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RouteType));
+        setRoutes(routesData);
+      }),
+      onSnapshot(collection(db, 'permissionProfiles'), (snapshot) => {
+        const permissionProfilesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PermissionProfile));
+        setPermissionProfiles(permissionProfilesData);
+      }),
+    ];
+    return () => unsubscribes.forEach(unsub => unsub());
+  }, []);
 
   const value = {
     routes,
@@ -49,9 +73,11 @@ export function AppProvider({ children }: AppProviderProps) {
 
   return (
     <AppContext.Provider value={value}>
-      <GoogleMapsLoader>
-        {children}
-      </GoogleMapsLoader>
+      <AuthProvider>
+        <GoogleMapsLoader>
+          {children}
+        </GoogleMapsLoader>
+      </AuthProvider>
     </AppContext.Provider>
   )
 }

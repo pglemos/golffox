@@ -1,8 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { CompaniesService } from '@/services/companiesService';
-import { withRoleAuth, handleApiError, validateRequestBody } from '../middleware';
 
-const companiesService = new CompaniesService();
+import { NextRequest, NextResponse } from 'next/server';
+import { adminDb } from '../../../lib/firebaseAdmin';
+import { withRoleAuth, handleApiError, validateRequestBody } from '../middleware';
 
 // GET - Listar empresas
 export const GET = withRoleAuth(['admin', 'operator'])(async (request) => {
@@ -10,86 +9,35 @@ export const GET = withRoleAuth(['admin', 'operator'])(async (request) => {
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '10');
-    const search = searchParams.get('search') || undefined;
-    const status = searchParams.get('status') || undefined;
-    const withStats = searchParams.get('withStats') === 'true';
+    const search = searchParams.get('search') || '';
+    const status = searchParams.get('status') || '';
 
-    let result;
+    let companiesQuery = adminDb.collection('companies');
 
-    if (withStats) {
-      const allCompaniesWithStats = await companiesService.findAllWithStats();
-      
-      if (allCompaniesWithStats.error) {
-        return NextResponse.json(
-          { error: allCompaniesWithStats.error },
-          { status: 400 }
-        );
-      }
-
-      let filteredData = allCompaniesWithStats.data || [];
-      
-      // Aplicar filtros manualmente
-      if (search) {
-        filteredData = filteredData.filter(company => 
-          company.name.toLowerCase().includes(search.toLowerCase()) ||
-          company.cnpj.includes(search)
-        );
-      }
-      
-      if (status) {
-        filteredData = filteredData.filter(company => company.status === status);
-      }
-
-      // Aplicar paginação manual
-      const startIndex = (page - 1) * limit;
-      const endIndex = startIndex + limit;
-      const paginatedData = filteredData.slice(startIndex, endIndex);
-
-      result = {
-        data: paginatedData,
-        error: null,
-        pagination: {
-          page,
-          limit,
-          total: filteredData.length,
-          totalPages: Math.ceil(filteredData.length / limit)
-        }
-      };
-    } else {
-      const filters: any = {};
-      if (search) filters.name = search;
-      if (status) filters.status = status;
-
-      result = await companiesService.findWithFilters(filters);
-      
-      if (result.error) {
-        return NextResponse.json(
-          { error: result.error },
-          { status: 400 }
-        );
-      }
-
-      // Aplicar paginação manual para findWithFilters também
-      const startIndex = (page - 1) * limit;
-      const endIndex = startIndex + limit;
-      const paginatedData = (result.data || []).slice(startIndex, endIndex);
-
-      result = {
-        data: paginatedData,
-        error: null,
-        pagination: {
-          page,
-          limit,
-          total: result.data?.length || 0,
-          totalPages: Math.ceil((result.data?.length || 0) / limit)
-        }
-      };
+    if (status) {
+      companiesQuery = companiesQuery.where('status', '==', status);
     }
+
+    const snapshot = await companiesQuery.get();
+    let companies = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+    if (search) {
+      const searchTerm = search.toLowerCase();
+      companies = companies.filter(company => 
+        company.name.toLowerCase().includes(searchTerm) ||
+        (company.cnpj && company.cnpj.includes(searchTerm))
+      );
+    }
+
+    const total = companies.length;
+    const totalPages = Math.ceil(total / limit);
+    const startIndex = (page - 1) * limit;
+    const paginatedCompanies = companies.slice(startIndex, startIndex + limit);
 
     return NextResponse.json({
       success: true,
-      data: result.data,
-      pagination: result.pagination,
+      data: paginatedCompanies,
+      pagination: { page, limit, total, totalPages },
     });
 
   } catch (error) {
@@ -102,30 +50,27 @@ export const POST = withRoleAuth(['admin'])(async (request) => {
   try {
     const body = await request.json();
 
-    // Validar campos obrigatórios
-    const validation = validateRequestBody(body, [
-      'name',
-      'cnpj',
-      'email',
-      'phone',
-      'address'
-    ]);
-
+    const validation = validateRequestBody(body, ['name', 'cnpj', 'contact', 'address_text']);
     if (!validation.isValid) {
       return NextResponse.json(
-        { 
-          error: 'Campos obrigatórios não fornecidos',
-          missingFields: validation.missingFields 
-        },
+        { error: `Campos obrigatórios ausentes: ${validation.missingFields?.join(', ')}` },
         { status: 400 }
       );
     }
 
-    const result = await companiesService.create(body);
+    const newCompany = {
+      ...body,
+      status: 'Ativo',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    const docRef = await adminDb.collection('companies').add(newCompany);
+    const company = { id: docRef.id, ...newCompany };
 
     return NextResponse.json({
       success: true,
-      data: result,
+      data: company,
       message: 'Empresa criada com sucesso',
     }, { status: 201 });
 

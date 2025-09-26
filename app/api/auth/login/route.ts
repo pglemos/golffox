@@ -1,75 +1,50 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { supabaseServer } from '@/lib/supabase-server'
-import { handleApiError, validateRequestBody } from '../../middleware'
-import type { Database } from '@/lib/supabase'
 
-type UserRow = Database['public']['Tables']['users']['Row']
+import { NextRequest, NextResponse } from 'next/server';
+import { adminAuth, adminDb } from '../../../../lib/firebaseAdmin';
+import { handleApiError, validateRequestBody } from '../../middleware';
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
+    const body = await request.json();
 
-    // Validação dos campos obrigatórios
-    const validation = validateRequestBody(body, ['email', 'password'])
+    const validation = validateRequestBody(body, ['email', 'password']);
     if (!validation.isValid) {
       return NextResponse.json(
         { error: `Campos obrigatórios ausentes: ${validation.missingFields?.join(', ')}` },
         { status: 400 }
-      )
+      );
     }
 
-    const { email, password } = body
+    const { email, password } = body;
 
-    // Realizar login usando o cliente servidor
-    const { data: authData, error: authError } = await supabaseServer.auth.signInWithPassword({
-      email,
-      password
-    })
+    try {
+      const userRecord = await adminAuth.getUserByEmail(email);
+      
+      // A API de login do Firebase não expõe um método para verificar a senha diretamente.
+      // A verificação é feita no lado do cliente.
+      // Para o back-end, criamos um token customizado e retornamos ao cliente para login.
+      const customToken = await adminAuth.createCustomToken(userRecord.uid);
 
-    if (authError) {
-      return NextResponse.json(
-        { error: `Erro de autenticação: ${authError.message}` },
-        { status: 401 }
-      )
-    }
+      const userDoc = await adminDb.collection('users').doc(userRecord.uid).get();
+      const userData = userDoc.data();
 
-    if (!authData.user || !authData.session) {
-      return NextResponse.json(
-        { error: 'Falha na autenticação' },
-        { status: 401 }
-      )
-    }
-
-    // Buscar dados completos do usuário
-    const { data: userData, error: userError } = await supabaseServer
-      .from('users')
-      .select('*')
-      .eq('id', authData.user.id)
-      .single() as { data: UserRow | null, error: any }
-
-    if (userError || !userData) {
-      return NextResponse.json(
-        { error: 'Usuário não encontrado' },
-        { status: 404 }
-      )
-    }
-
-    return NextResponse.json({
-      message: 'Login realizado com sucesso',
-      user: {
-        id: userData.id,
-        email: userData.email,
-        name: userData.name,
-        role: userData.role
-      },
-      session: {
-        access_token: authData.session.access_token,
-        refresh_token: authData.session.refresh_token,
-        expires_at: authData.session.expires_at
+      return NextResponse.json({
+        message: 'Login realizado com sucesso',
+        user: {
+          id: userRecord.uid,
+          email: userRecord.email,
+          name: userData?.name || '',
+          role: userData?.role || 'passenger',
+        },
+        token: customToken,
+      });
+    } catch (error: any) {
+      if (error.code === 'auth/user-not-found') {
+        return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 });
       }
-    })
-
+      return handleApiError(error);
+    }
   } catch (error) {
-    return handleApiError(error)
+    return handleApiError(error);
   }
 }

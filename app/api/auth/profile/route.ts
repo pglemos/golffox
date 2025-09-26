@@ -1,27 +1,22 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { AuthService } from '@/services/authService';
-import { withAuth, handleApiError, validateRequestBody } from '../../middleware';
 
-const authService = new AuthService();
+import { NextRequest, NextResponse } from 'next/server';
+import { adminAuth, adminDb } from '../../../../lib/firebaseAdmin';
+import { withAuth, handleApiError } from '../../middleware';
 
 // GET - Obter perfil do usuário
 export const GET = withAuth(async (request) => {
   try {
-    const user = request.user;
-
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Usuário não encontrado' },
-        { status: 400 }
-      );
+    const uid = request.user?.uid;
+    if (!uid) {
+      return NextResponse.json({ error: 'Usuário não autenticado' }, { status: 401 });
     }
 
-    // O middleware já fornece os dados do usuário completos
-    return NextResponse.json({
-      success: true,
-      data: user,
-    });
+    const userDoc = await adminDb.collection('users').doc(uid).get();
+    if (!userDoc.exists) {
+      return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 });
+    }
 
+    return NextResponse.json({ success: true, data: userDoc.data() });
   } catch (error) {
     return handleApiError(error);
   }
@@ -30,17 +25,12 @@ export const GET = withAuth(async (request) => {
 // PUT - Atualizar perfil do usuário
 export const PUT = withAuth(async (request) => {
   try {
-    const userId = request.user?.id;
-    const body = await request.json();
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'ID do usuário não encontrado' },
-        { status: 400 }
-      );
+    const uid = request.user?.uid;
+    if (!uid) {
+      return NextResponse.json({ error: 'Usuário não autenticado' }, { status: 401 });
     }
 
-    // Campos permitidos para atualização
+    const body = await request.json();
     const allowedFields = ['name', 'phone', 'cpf', 'avatar_url'];
     const updateData: any = {};
 
@@ -57,19 +47,11 @@ export const PUT = withAuth(async (request) => {
       );
     }
 
-    const result = await authService.updateProfile(updateData);
+    updateData.updated_at = new Date().toISOString();
 
-    if (result.error) {
-      return NextResponse.json(
-        { error: result.error },
-        { status: 400 }
-      );
-    }
+    await adminDb.collection('users').doc(uid).update(updateData);
 
-    return NextResponse.json({
-      message: 'Perfil atualizado com sucesso'
-    });
-
+    return NextResponse.json({ message: 'Perfil atualizado com sucesso' });
   } catch (error) {
     return handleApiError(error);
   }

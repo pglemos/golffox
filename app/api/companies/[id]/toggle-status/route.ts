@@ -1,8 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { CompaniesService } from '@/services/companiesService';
-import { withRoleAuth, handleApiError } from '../../../middleware';
 
-const companiesService = new CompaniesService();
+import { NextRequest, NextResponse } from 'next/server';
+import { adminDb } from '../../../../lib/firebaseAdmin';
+import { withRoleAuth, handleApiError } from '../../../middleware';
 
 // POST - Alternar status da empresa
 export const POST = withRoleAuth(['admin'])(async (
@@ -11,29 +10,24 @@ export const POST = withRoleAuth(['admin'])(async (
 ) => {
   try {
     const { id } = params;
+    const docRef = adminDb.collection('companies').doc(id);
 
-    // Verificar se a empresa existe
-    const existingCompany = await companiesService.findById(id);
-    if (!existingCompany) {
-      return NextResponse.json(
-        { error: 'Empresa não encontrada' },
-        { status: 404 }
-      );
+    const doc = await docRef.get();
+    if (!doc.exists) {
+      return NextResponse.json({ error: 'Empresa não encontrada' }, { status: 404 });
     }
 
-    const result = await companiesService.toggleStatus(id);
+    const currentStatus = doc.data()?.status;
+    const newStatus = currentStatus === 'Ativo' ? 'Inativo' : 'Ativo';
 
-    if (result.error) {
-      return NextResponse.json(
-        { error: result.error },
-        { status: 400 }
-      );
-    }
+    await docRef.update({
+      status: newStatus,
+      updated_at: new Date().toISOString(),
+    });
 
     return NextResponse.json({
       success: true,
-      data: result.data,
-      message: `Status da empresa ${result.data?.status === 'Ativo' ? 'ativado' : 'desativado'} com sucesso`,
+      message: `Status da empresa alterado para ${newStatus} com sucesso`,
     });
 
   } catch (error) {

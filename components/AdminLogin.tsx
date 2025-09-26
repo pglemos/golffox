@@ -1,11 +1,10 @@
+
 import React, { useState } from 'react';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../../lib/firebase';
 
-interface AdminLoginProps {
-  onLogin: (success: boolean) => void;
-}
-
-const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin }) => {
-  const [username, setUsername] = useState('');
+const AdminLogin: React.FC = () => {
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -15,17 +14,12 @@ const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin }) => {
     setIsLoading(true);
     setError('');
 
-    // Simular delay de autenticação
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    if (username === 'admin' && password === 'Pedro2612@') {
-      localStorage.setItem('adminAuthenticated', 'true');
-      onLogin(true);
-    } else {
-      setError('Credenciais inválidas. Verifique o login e senha.');
-      onLogin(false);
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (error: any) {
+      setError(error.message);
     }
-    
+
     setIsLoading(false);
   };
 
@@ -39,16 +33,16 @@ const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin }) => {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
-              Login
+            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+              Email
             </label>
             <input
-              type="text"
-              id="username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              type="email"
+              id="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Digite seu login"
+              placeholder="Digite seu email"
               required
             />
           </div>

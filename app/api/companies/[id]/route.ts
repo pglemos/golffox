@@ -1,8 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { CompaniesService } from '@/services/companiesService';
-import { withRoleAuth, handleApiError, validateRequestBody } from '../../middleware';
 
-const companiesService = new CompaniesService();
+import { NextRequest, NextResponse } from 'next/server';
+import { adminDb } from '../../../../lib/firebaseAdmin';
+import { withRoleAuth, handleApiError } from '../../middleware';
 
 // GET - Obter empresa por ID
 export const GET = withRoleAuth(['admin', 'operator', 'client'])(async (
@@ -11,31 +10,14 @@ export const GET = withRoleAuth(['admin', 'operator', 'client'])(async (
 ) => {
   try {
     const { id } = params;
-    const { searchParams } = new URL(request.url);
-    const withStats = searchParams.get('withStats') === 'true';
+    const docRef = adminDb.collection('companies').doc(id);
+    const doc = await docRef.get();
 
-    let result;
-
-    if (withStats) {
-      const companies = await companiesService.findAllWithStats();
-      result = companies.data?.find(company => company.id === id);
-    } else {
-      const companyResult = await companiesService.findById(id);
-      result = companyResult.data;
+    if (!doc.exists) {
+      return NextResponse.json({ error: 'Empresa não encontrada' }, { status: 404 });
     }
 
-    if (!result) {
-      return NextResponse.json(
-        { error: 'Empresa não encontrada' },
-        { status: 404 }
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-      data: result,
-    });
-
+    return NextResponse.json({ success: true, data: { id: doc.id, ...doc.data() } });
   } catch (error) {
     return handleApiError(error);
   }
@@ -49,24 +31,24 @@ export const PUT = withRoleAuth(['admin'])(async (
   try {
     const { id } = params;
     const body = await request.json();
+    const docRef = adminDb.collection('companies').doc(id);
 
-    // Verificar se a empresa existe
-    const existingCompany = await companiesService.findById(id);
-    if (!existingCompany) {
-      return NextResponse.json(
-        { error: 'Empresa não encontrada' },
-        { status: 404 }
-      );
+    const doc = await docRef.get();
+    if (!doc.exists) {
+      return NextResponse.json({ error: 'Empresa não encontrada' }, { status: 404 });
     }
 
-    const result = await companiesService.update(id, body);
+    const updateData = {
+      ...body,
+      updated_at: new Date().toISOString(),
+    };
+
+    await docRef.update(updateData);
 
     return NextResponse.json({
       success: true,
-      data: result,
       message: 'Empresa atualizada com sucesso',
     });
-
   } catch (error) {
     return handleApiError(error);
   }
@@ -79,23 +61,19 @@ export const DELETE = withRoleAuth(['admin'])(async (
 ) => {
   try {
     const { id } = params;
+    const docRef = adminDb.collection('companies').doc(id);
 
-    // Verificar se a empresa existe
-    const existingCompany = await companiesService.findById(id);
-    if (!existingCompany) {
-      return NextResponse.json(
-        { error: 'Empresa não encontrada' },
-        { status: 404 }
-      );
+    const doc = await docRef.get();
+    if (!doc.exists) {
+      return NextResponse.json({ error: 'Empresa não encontrada' }, { status: 404 });
     }
 
-    await companiesService.delete(id);
+    await docRef.delete();
 
     return NextResponse.json({
       success: true,
       message: 'Empresa excluída com sucesso',
     });
-
   } catch (error) {
     return handleApiError(error);
   }
