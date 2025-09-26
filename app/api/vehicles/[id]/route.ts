@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { VehiclesService } from '@/services/vehiclesService';
+import { VehiclesService } from '../../../../services/vehiclesService';
 import { withAuth, withRoleAuth, handleApiError, AuthenticatedRequest } from '../../middleware';
-import { supabase } from '@/lib/supabase';
 
 const vehiclesService = new VehiclesService();
 
@@ -74,36 +73,6 @@ export const PUT = withRoleAuth(['admin', 'operator'])(async (
   try {
     const { id } = params;
     const body = await request.json();
-    const userRole = request.user?.role;
-    const userCompanyId = request.user?.company_id;
-
-    // Verificar se o veículo existe
-    const existingVehicle = await vehiclesService.findById(id);
-    if (existingVehicle.error || !existingVehicle.data) {
-      return NextResponse.json(
-        { error: existingVehicle.error || 'Veículo não encontrado' },
-        { status: 404 }
-      );
-    }
-
-    // Para operadores, verificar se o veículo pertence à empresa através do driver
-    if (userRole === 'operator') {
-      // Buscar o driver associado ao veículo para verificar a empresa
-      if (existingVehicle.data.driver_id) {
-        const { data: driver } = await supabase
-          .from('drivers')
-          .select('linked_company')
-          .eq('id', existingVehicle.data.driver_id)
-          .single()
-        
-        if (driver && driver.linked_company !== userCompanyId) {
-          return NextResponse.json(
-            { error: 'Acesso negado: veículo não pertence à sua empresa' },
-            { status: 403 }
-          )
-        }
-      }
-    }
 
     const result = await vehiclesService.update(id, body);
 
@@ -125,37 +94,7 @@ export const DELETE = withRoleAuth(['admin', 'operator'])(async (
 ) => {
   try {
     const { id } = params;
-    const userRole = request.user?.role;
-    const userCompanyId = request.user?.company_id;
-
-    // Verificar se o veículo existe
-    const existingVehicle = await vehiclesService.findById(id);
-    if (existingVehicle.error || !existingVehicle.data) {
-      return NextResponse.json(
-        { error: existingVehicle.error || 'Veículo não encontrado' },
-        { status: 404 }
-      );
-    }
-
-    // Para operadores, verificar se o veículo pertence à empresa através do driver
-    if (userRole === 'operator') {
-      // Buscar o driver associado ao veículo para verificar a empresa
-      if (existingVehicle.data.driver_id) {
-        const { data: driver } = await supabase
-          .from('drivers')
-          .select('linked_company')
-          .eq('id', existingVehicle.data.driver_id)
-          .single()
-        
-        if (driver && driver.linked_company !== userCompanyId) {
-          return NextResponse.json(
-            { error: 'Não é possível excluir veículo de outra empresa' },
-            { status: 403 }
-          )
-        }
-      }
-    }
-
+    
     await vehiclesService.delete(id);
 
     return NextResponse.json({

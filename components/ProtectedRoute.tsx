@@ -1,8 +1,8 @@
 
 import React from 'react';
-import { useAuth } from '../../app/auth/AuthContext';
+import { useAuth } from '../app/auth/AuthContext';
 import AdminLogin from './AdminLogin';
-import { auth } from '../../lib/firebase';
+import { auth } from '../lib/firebase';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;

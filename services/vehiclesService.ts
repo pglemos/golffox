@@ -1,5 +1,5 @@
 
-import { db } from '../lib/firebase';
+import { adminDb } from '../lib/firebaseAdmin';
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, deleteDoc, query, where } from 'firebase/firestore';
 
 // Interfaces para veículos
@@ -24,19 +24,19 @@ export interface VehicleWithDriver extends Vehicle {
 }
 
 export class VehiclesService {
-  private vehiclesCollection = collection(db, 'vehicles');
+  private vehiclesCollection = adminDb.collection('vehicles');
 
   async findAllWithDetails(): Promise<{ data: VehicleWithDriver[], error: string | null }> {
     try {
-      const snapshot = await getDocs(this.vehiclesCollection);
+      const snapshot = await this.vehiclesCollection.get();
       const vehicles: VehicleWithDriver[] = [];
       for (const doc of snapshot.docs) {
         const vehicle = { id: doc.id, ...doc.data() } as Vehicle;
         
         let driverData: any = undefined;
         if (vehicle.driver_id) {
-            const driverDoc = await getDoc(doc(db, 'drivers', vehicle.driver_id));
-            if (driverDoc.exists()) {
+            const driverDoc = await adminDb.collection('drivers').doc(vehicle.driver_id).get();
+            if (driverDoc.exists) {
                 driverData = { id: driverDoc.id, ...driverDoc.data() };
             }
         }
@@ -52,10 +52,23 @@ export class VehiclesService {
     }
   }
 
+  async findById(id: string): Promise<{ data: Vehicle | null, error: string | null }> {
+    try {
+      const docRef = this.vehiclesCollection.doc(id);
+      const doc = await docRef.get();
+      if (!doc.exists) {
+        return { data: null, error: 'Veículo não encontrado' };
+      }
+      return { data: { id: doc.id, ...doc.data() } as Vehicle, error: null };
+    } catch (error) {
+      return { data: null, error: 'Erro ao buscar veículo por ID' };
+    }
+  }
+
   async findByPlate(plate: string): Promise<{ data: Vehicle | null, error: string | null }> {
     try {
-      const q = query(this.vehiclesCollection, where('plate', '==', plate.toUpperCase()));
-      const snapshot = await getDocs(q);
+      const q = this.vehiclesCollection.where('plate', '==', plate.toUpperCase());
+      const snapshot = await q.get();
       if (snapshot.empty) {
         return { data: null, error: null };
       }
@@ -82,7 +95,7 @@ export class VehiclesService {
       return { data: null, error: 'Placa já cadastrada' };
     }
     try {
-      const docRef = await addDoc(this.vehiclesCollection, data);
+      const docRef = await this.vehiclesCollection.add(data);
       return { data: { id: docRef.id, ...data }, error: null };
     } catch (error) {
       return { data: null, error: 'Erro ao criar veículo' };
@@ -100,24 +113,34 @@ export class VehiclesService {
       }
     }
     try {
-      const docRef = doc(db, 'vehicles', id);
-      await updateDoc(docRef, data);
-      const updatedDoc = await getDoc(docRef);
+      const docRef = this.vehiclesCollection.doc(id);
+      await docRef.update(data);
+      const updatedDoc = await docRef.get();
       return { data: { id: updatedDoc.id, ...updatedDoc.data() } as Vehicle, error: null };
     } catch (error) {
       return { data: null, error: 'Erro ao atualizar veículo' };
     }
   }
 
+  async delete(id: string): Promise<{ error: string | null }> {
+    try {
+      const docRef = this.vehiclesCollection.doc(id);
+      await docRef.delete();
+      return { error: null };
+    } catch (error) {
+      return { error: 'Erro ao excluir veículo' };
+    }
+  }
+
   async assignDriver(vehicleId: string, driverId: string): Promise<{ data: Vehicle | null, error: string | null }> {
     try {
-        const vehicleRef = doc(db, 'vehicles', vehicleId);
-        const vehicleDoc = await getDoc(vehicleRef);
-        if (!vehicleDoc.exists() || vehicleDoc.data().driver_id) {
+        const vehicleRef = this.vehiclesCollection.doc(vehicleId);
+        const vehicleDoc = await vehicleRef.get();
+        if (!vehicleDoc.exists || vehicleDoc.data()?.driver_id) {
             return { data: null, error: 'Veículo não encontrado ou já possui motorista' };
         }
-        await updateDoc(vehicleRef, { driver_id: driverId });
-        const updatedDoc = await getDoc(vehicleRef);
+        await vehicleRef.update({ driver_id: driverId });
+        const updatedDoc = await vehicleRef.get();
         return { data: { id: updatedDoc.id, ...updatedDoc.data() } as Vehicle, error: null };
     } catch (error) {
         return { data: null, error: 'Erro ao atribuir motorista' };
@@ -126,9 +149,9 @@ export class VehiclesService {
 
   async unassignDriver(vehicleId: string): Promise<{ data: Vehicle | null, error: string | null }> {
     try {
-        const vehicleRef = doc(db, 'vehicles', vehicleId);
-        await updateDoc(vehicleRef, { driver_id: null });
-        const updatedDoc = await getDoc(vehicleRef);
+        const vehicleRef = this.vehiclesCollection.doc(vehicleId);
+        await vehicleRef.update({ driver_id: null });
+        const updatedDoc = await vehicleRef.get();
         return { data: { id: updatedDoc.id, ...updatedDoc.data() } as Vehicle, error: null };
     } catch (error) {
         return { data: null, error: 'Erro ao remover motorista' };

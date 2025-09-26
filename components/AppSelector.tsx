@@ -1,3 +1,4 @@
+
 import React from 'react';
 import type { AppView } from '../types';
 import { APP_VIEWS, GOLFFOX_LOGO_BASE64 } from '../constants';
